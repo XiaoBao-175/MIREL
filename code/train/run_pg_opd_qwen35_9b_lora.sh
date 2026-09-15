@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/common_env.sh"
+
+# The actor receives a new LoRA adapter. MODEL_PATH must point to the merged
+# 9B SFT checkpoint for the intended MIREL recipe. Teachers are frozen copies
+# of that same checkpoint and do not load the actor adapter.
+MODEL_PATH=${MODEL_PATH:-Qwen/Qwen3.5-9B}
+DATA_PATH=${DATA_PATH:-$FINAL_ROOT/data/Qwen35-9B/pg_opd.parquet}
+RUN_ROOT=${RUN_ROOT:-$FINAL_ROOT/runs/pg_opd_qwen35_9b_lora_stage_a_3000_1epoch}
+RUN_NAME=${RUN_NAME:-$(basename "$RUN_ROOT")}
+CUSTOM_CHAT_TEMPLATE=${CUSTOM_CHAT_TEMPLATE:-$PG_OPD_ROOT/chat_templates/perception_chat_template_qwen35.jinja}
+
+mkdir -p "$RUN_ROOT/checkpoints" "$RUN_ROOT/rollouts" "$RUN_ROOT/wandb"
+export WANDB_DIR="$RUN_ROOT/wandb"
+export VLLM_USE_V1=1
+
+exec "$PYTHON" -m verl.trainer.main_ppo --config-name vopd \
+  data.train_files="[\"$DATA_PATH\"]" \
+  data.val_files="[]" \
+  data.train_max_samples=-1 \
+  data.filter_overlong_prompts=True \
+  data.max_prompt_length="${MAX_PROMPT_LENGTH:-8192}" \
+  data.max_response_length="${MAX_RESPONSE_LENGTH:-512}" \
+  data.truncation=error \
+  data.shuffle=True \
+  data.seed="${SEED:-20260913}" \
+  data.trust_remote_code=True \
+  data.return_multi_modal_inputs=True \
+  data.image_key=images \
+  +data.apply_chat_template_kwargs="{enable_thinking:false}" \
+  data.train_batch_size="${TRAIN_BATCH_SIZE:-32}" \
+  data.dataloader_num_workers="${NUM_WORKERS:-2}" \
+  actor_rollout_ref.model.path="$MODEL_PATH" \
+  actor_rollout_ref.model.lora_rank="${LORA_RANK:-32}" \
+  actor_rollout_ref.model.lora_alpha="${LORA_ALPHA:-16}" \
+  actor_rollout_ref.model.target_modules=all-linear \
+  actor_rollout_ref.model.lora_adapter_path=null \
+  actor_rollout_ref.model.trust_remote_code=True \
+  actor_rollout_ref.model.use_remove_padding=True \
+  actor_rollout_ref.model.enable_gradient_checkpointing=True \
+  actor_rollout_ref.model.custom_chat_template_file="$CUSTOM_CHAT_TEMPLATE" \
+  actor_rollout_ref.rollout.name=vllm \
+  actor_rollout_ref.rollout.n=8 \
+  actor_rollout_ref.rollout.temperature=1.0 \
+  actor_rollout_ref.rollout.top_p=1.0 \
+  actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+  actor_rollout_ref.rollout.gpu_memory_utilization="${VLLM_GPU_MEMORY_UTILIZATION:-0.30}" \
+  actor_rollout_ref.rollout.max_num_batched_tokens="${TOTAL_SEQ_LENGTH:-8704}" \
+  actor_rollout_ref.rollout.max_model_len="${TOTAL_SEQ_LENGTH:-8704}" \
+  actor_rollout_ref.rollout.response_length="${MAX_RESPONSE_LENGTH:-512}" \
+  actor_rollout_ref.rollout.calculate_log_probs=True \
+  actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
+  actor_rollout_ref.rollout.agent.num_workers="${ROLLOUT_WORKERS:-2}" \
+  actor_rollout_ref.actor.strategy=fsdp \
+  actor_rollout_ref.actor.optim.lr="${LR:-2e-6}" \
+  actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
+  actor_rollout_ref.actor.ppo_mini_batch_size="${PPO_MINI_BATCH_SIZE:-8}" \
+  actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+  actor_rollout_ref.actor.use_dynamic_bsz=True \
+  actor_rollout_ref.actor.ppo_max_token_len_per_gpu="${TOTAL_SEQ_LENGTH:-8704}" \
+  actor_rollout_ref.actor.fsdp_config.param_offload=True \
+  actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+  actor_rollout_ref.actor.policy_loss.loss_mode=vopd \
+  actor_rollout_ref.actor.use_kl_loss=False \
+  actor_rollout_ref.actor.calculate_entropy=False \
+  actor_rollout_ref.actor.self_distillation.full_logit_distillation=True \
+  actor_rollout_ref.actor.self_distillation.distillation_topk=100 \
+  actor_rollout_ref.actor.self_distillation.distillation_add_tail=True \
+  actor_rollout_ref.actor.self_distillation.alpha=0.0 \
+  actor_rollout_ref.actor.self_distillation.gamma=1.0 \
+  actor_rollout_ref.actor.self_distillation.teacher_always_on=True \
+  actor_rollout_ref.actor.self_distillation.teacher_model_source=fixed \
+  actor_rollout_ref.actor.self_distillation.teacher_model_path="$MODEL_PATH" \
+  actor_rollout_ref.actor.self_distillation.teacher_image_key=teacher_images \
+  actor_rollout_ref.actor.self_distillation.teacher_negative_image_key=teacher_negative_images \
+  actor_rollout_ref.actor.self_distillation.teacher_regularization=ema \
+  actor_rollout_ref.actor.self_distillation.teacher_update_rate=0.0 \
+  actor_rollout_ref.actor.self_distillation.privilege_beta=1.0 \
+  actor_rollout_ref.actor.self_distillation.privilege_temperature=0.25 \
+  actor_rollout_ref.actor.self_distillation.privilege_min_gain=0.0 \
+  actor_rollout_ref.actor.self_distillation.fallback_to_policy_loss_on_missing_teacher=False \
+  actor_rollout_ref.actor.self_distillation.max_reprompt_len=10240 \
+  actor_rollout_ref.actor.self_distillation.is_clip=2.0 \
+  algorithm.adv_estimator=grpo \
+  algorithm.norm_adv_by_std_in_grpo=False \
+  algorithm.use_kl_in_reward=False \
+  algorithm.rollout_correction.rollout_is=token \
+  algorithm.rollout_correction.rollout_is_threshold=2.0 \
+  reward_model.enable=False \
+  reward_model.use_reward_loop=False \
+  custom_reward_function.path=null \
+  custom_reward_function.name=null \
+  trainer.project_name="${WANDB_PROJECT:-MIREL}" \
+  trainer.group_name=PG-OPD-qwen35-9b-lora \
+  trainer.experiment_name="$RUN_NAME" \
+  trainer.logger='["console","wandb"]' \
+  trainer.n_gpus_per_node="${NPROC_PER_NODE:-8}" \
+  trainer.nnodes=1 \
+  trainer.total_epochs=1 \
+  trainer.save_freq="${SAVE_FREQ:-100}" \
+  trainer.max_actor_ckpt_to_keep="${MAX_CKPT_TO_KEEP:-2}" \
+  trainer.test_freq=-1 \
+  trainer.val_before_train=False \
+  trainer.default_local_dir="$RUN_ROOT/checkpoints" \
+  trainer.rollout_data_dir="$RUN_ROOT/rollouts" \
+  trainer.resume_mode=disable \
+  +actor_rollout_ref.rollout.engine_kwargs.vllm.compilation_config.pass_config.fuse_allreduce_rms=False \
+  +actor_rollout_ref.rollout.engine_kwargs.vllm.kernel_config.enable_flashinfer_autotune=False \
+  +actor_rollout_ref.rollout.engine_kwargs.vllm.enforce_eager=True \
+  +actor_rollout_ref.rollout.engine_kwargs.vllm.enable_prefix_caching=False
