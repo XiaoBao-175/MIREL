@@ -1,0 +1,63 @@
+[environment]
+name = "mirel-pg-opd"
+python = "3.12.14"
+cuda = "12.8"
+gpu_architecture = "H100 or another CUDA-capable GPU"
+
+[pytorch]
+torch = "2.10.0+cu128"
+torchvision = "0.25.0+cu128"
+torchaudio = "2.10.0+cu128"
+
+[model_stack]
+transformers = "5.5.0"
+tokenizers = "0.22.2"
+safetensors = "0.7.0"
+accelerate = "1.12.0"
+peft = "0.18.0"
+flash_attn = "2.8.3.post1"
+vllm = "0.18.0"
+ray = "2.53.0"
+tensordict = "0.10.0"
+liger_kernel = "0.7.0"
+
+[data_and_evaluation]
+datasets = "4.4.2"
+numpy = "1.26.4"
+pandas = "2.3.3"
+pyarrow = "22.0.0"
+pillow = "12.0.0"
+qwen_vl_utils = "0.0.14"
+opencv_python_headless = "4.13.0.92"
+scikit_learn = "1.9.0"
+scipy = "1.17.1"
+matplotlib = "3.10.8"
+openai = "2.24.0"
+wandb = "0.23.1"
+
+[utilities]
+hydra_core = "1.3.2"
+omegaconf = "2.3.0"
+einops = "0.8.2"
+sentencepiece = "0.2.1"
+pyzmq = "27.1.0"
+pyyaml = "6.0.3"
+requests = "2.32.5"
+tqdm = "4.67.3"
+rich = "14.3.3"
+psutil = "7.1.3"
+python_dotenv = "1.2.1"
+huggingface_hub = "1.9.0"
+
+[training]
+thinking = false
+wandb_mode = "online"
+epochs = 1
+checkpoint_save_frequency = 100
+max_checkpoints = 2
+
+[evaluation]
+tensor_parallel_size = 8
+temperature = 0.0
+max_tokens = 512
+thinking = false
