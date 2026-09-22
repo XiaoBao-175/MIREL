@@ -67,7 +67,7 @@ exec "$PYTHON" -m verl.trainer.main_ppo --config-name vopd \
   actor_rollout_ref.actor.self_distillation.full_logit_distillation=True \
   actor_rollout_ref.actor.self_distillation.distillation_topk=100 \
   actor_rollout_ref.actor.self_distillation.distillation_add_tail=True \
-  actor_rollout_ref.actor.self_distillation.alpha=0.0 \
+  actor_rollout_ref.actor.self_distillation.alpha=0.5 \
   actor_rollout_ref.actor.self_distillation.gamma=1.0 \
   actor_rollout_ref.actor.self_distillation.teacher_always_on=True \
   actor_rollout_ref.actor.self_distillation.teacher_model_source=fixed \
