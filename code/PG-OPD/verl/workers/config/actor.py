@@ -42,7 +42,7 @@ class SelfDistillationConfig(BaseConfig):
     Args:
         Distillation is enabled when policy_loss.loss_mode is "vopd".
         full_logit_distillation (bool): Whether to use full-logit KL distillation.
-        alpha (float): KL interpolation coefficient. 0.0=forward KL, 1.0=reverse KL, in-between=JSD.
+        alpha (float): JSD interpolation coefficient for the released recipe.
         gamma (float): Weight applied to the SDPO loss.
         success_reward_threshold (float): Minimum sequence reward to be considered successful.
         teacher_regularization (str): Teacher regularization mode. Options: "ema", "trust-region", "progressive".
@@ -77,7 +77,7 @@ class SelfDistillationConfig(BaseConfig):
     """
 
     full_logit_distillation: bool = True
-    alpha: float = 0.0
+    alpha: float = 0.5
     gamma: float = 1.0
     success_reward_threshold: float = 1.0
     teacher_regularization: str = "ema"
